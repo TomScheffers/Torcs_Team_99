@@ -39,7 +39,7 @@ class Driver:
         self.start_time = None
         self.time= 0
 
-        with open('best_param_default.txt','r') as file:
+        with open('best_so_far.txt','r') as file:
             lines = file.readlines()
             self.brake_scaling = float(lines[0])
             self.brake_translation = float(lines[1])
@@ -84,29 +84,12 @@ class Driver:
         lot of inputs. But it will get the car (if not disturbed by other
         drivers) successfully driven along the race track.
         """
-        avoidCollision = True
-        otherPosition = 0
-        with open('fristDriver.txt', 'w') as f:
-            f.write('%d' % carstate.race_position)
-        with open('secondDriver.txt') as f:
-            for line in f:
-                for s in line.split(' '):
-                    otherPosition = int(s)
-        if (carstate.race_position < otherPosition):# and (carstate.race_position-otherPosition > 1)):
-            #print("I am in front")
-            avoidCollision = True
-        else:
-            #print("I am a loser")
-            avoidCollision = False
 
-        if ((carstate.race_position == 11 or carstate.race_position == 12) and (otherPosition == 11 or otherPosition == 12)):
-            avoidCollision = True
-        print("Driver 1 is: ", avoidCollision)
-        command = Command()
-        self.steer(carstate, 0.0, command, avoidCollision)
 
         # ACC_LATERAL_MAX = 6400 * 5
         # v_x = min(80, math.sqrt(ACC_LATERAL_MAX / abs(command.steering)))
+        command = Command()
+
         v_x = max(50,max(carstate.distances_from_edge))
 
         if v_x == 200.0:
@@ -114,29 +97,10 @@ class Driver:
 
         if (carstate.speed_x * 3.6 - v_x > 0):  # v_x is the maximum speed allowed at a certain point
             diff = carstate.speed_x * 3.6 - v_x  # Convert to km/h from m 12zs
-            if avoidCollision == False and carstate.race_position < 12:
-                command.brake = 1
-            else:
-                for i in range(0, 10):
-                    if carstate.opponents[i] < 10.0:
-                        if avoidCollision == False:
-                            print("brake extra!!1")
-                            command.brake = (self.brake_scaling / (1 + np.exp(-1 * (diff - self.brake_translation))))*1.2
-                for i in range(27, len(carstate.opponents)):
-                    if carstate.opponents[i] < 10.0:
-                        if avoidCollision == False:
-                            print("brake extra!!1")
-                            command.brake = (self.brake_scaling / (1 + np.exp(-1 * (diff - self.brake_translation))))*1.2
-                if avoidCollision == True:
-                    command.brake = self.brake_scaling / (1 + np.exp(-1 * (diff - self.brake_translation)))
-
-
-
-
-
-        # print ('braking is',command.brake)
-
-        self.accelerate(carstate, v_x, command,avoidCollision)
+            command.brake = (self.brake_scaling / (1 + np.exp(-1 * (diff - self.brake_translation))))
+                # print ('braking is',command.brake)
+        self.steer(carstate, 0.0, command)
+        self.accelerate(carstate, v_x, command)
         #self.data_logger.log(carstate, command)
         data = []
         data.append(command.accelerator)
@@ -196,7 +160,7 @@ class Driver:
 
         return command
 
-    def accelerate(self, carstate, target_speed, command, avoid):
+    def accelerate(self, carstate, target_speed, command):
         # compensate engine deceleration, but invisible to controller to
         # prevent braking:
         speed_error = 1.0025 * target_speed * MPS_PER_KMH - carstate.speed_x
@@ -213,45 +177,23 @@ class Driver:
                 # off track, reduced grip:
                 acceleration = min(0.4, acceleration)
 
-            if avoid == False:
-                command.accelerator = (min(acceleration, 1))
-            else:
-                command.accelerator = (min(acceleration, 1))
+            command.accelerator = min(acceleration, 1)
 
-            if carstate.rpm > 8000:
+            if carstate.rpm > 5000:
                 command.gear = carstate.gear + 1
 
         # else:
         #     command.brake = min(-acceleration, 1)
 
-        if carstate.rpm < 3500:
+        if carstate.rpm < 2500:
             command.gear = carstate.gear - 1
 
         if not command.gear:
             command.gear = carstate.gear or 1
 
-    def steer(self, carstate, target_track_pos, command, avoid):
+    def steer(self, carstate, target_track_pos, command):
         steering_error = target_track_pos - carstate.distance_from_center + self.track_dev
         # print ('steering error is',steering_error)
-        for i in range(0,len(carstate.opponents)):
-            if carstate.opponents[i] < 7.0:
-                #print ('Opponent detected at',-180.0 + i*10,'degrees')
-                if i==1 or i==2 or i ==3 or i==4 or i==5 or i==6 or i==7 or i==8 or i==9:
-                    if avoid == True:
-                        steering_error += 0
-                    else:
-                        steering_error += 1
-                    #print ('Steering to the right')
-                if i==27 or i==28 or i==29 or i==30 or i==31 or i==32 or i==33 or i==34 or i==35:
-                    #command.steering == 1.0
-                    #print ('Steering to the left')
-                    if avoid == True:
-
-                        steering_error += 0
-                    else:
-                        steering_error += -1
-
-
 
         factor = 1. - (1. / (1. + np.exp(-self.c*(carstate.speed_x-self.D))))
 
